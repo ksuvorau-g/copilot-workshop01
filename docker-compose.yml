@@ -1,0 +1,53 @@
+services:
+  postgres:
+    image: postgres:17
+    container_name: aidemo1-postgres
+    environment:
+      POSTGRES_DB: aidemo
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - aidemo-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    image: adminer:5.4.0
+    container_name: aidemo1-adminer
+    ports:
+      - "8081:8080"
+    networks:
+      - aidemo-network
+    depends_on:
+      - postgres
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aidemo1-app
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aidemo
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+    ports:
+      - "8080:8080"
+    networks:
+      - aidemo-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+
+networks:
+  aidemo-network:
+    driver: bridge
