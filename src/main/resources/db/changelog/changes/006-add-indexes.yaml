@@ -1,0 +1,33 @@
+# Database Indexes - To be implemented in Phase 2
+databaseChangeLog:
+  - changeSet:
+      id: 006-add-indexes
+      author: system
+      comment: Add performance indexes
+      changes:
+        # Exchange rate indexes for fast lookups
+        - createIndex:
+            indexName: idx_exchange_rate_currencies
+            tableName: exchange_rate
+            columns:
+              - column:
+                  name: base_currency
+              - column:
+                  name: target_currency
+        - createIndex:
+            indexName: idx_exchange_rate_timestamp
+            tableName: exchange_rate
+            columns:
+              - column:
+                  name: timestamp
+                  descending: true
+        - createIndex:
+            indexName: idx_exchange_rate_period
+            tableName: exchange_rate
+            columns:
+              - column:
+                  name: base_currency
+              - column:
+                  name: target_currency
+              - column:
+                  name: timestamp

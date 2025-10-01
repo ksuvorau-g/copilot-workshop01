@@ -1,0 +1,25 @@
+# Default Roles - To be implemented in Phase 2
+databaseChangeLog:
+  - changeSet:
+      id: 007-insert-default-roles
+      author: system
+      comment: Insert default roles
+      changes:
+        - insert:
+            tableName: roles
+            columns:
+              - column:
+                  name: name
+                  value: ROLE_USER
+        - insert:
+            tableName: roles
+            columns:
+              - column:
+                  name: name
+                  value: ROLE_PREMIUM_USER
+        - insert:
+            tableName: roles
+            columns:
+              - column:
+                  name: name
+                  value: ROLE_ADMIN

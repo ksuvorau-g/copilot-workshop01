@@ -1,0 +1,28 @@
+# Role Table - To be implemented in Phase 2
+databaseChangeLog:
+  - changeSet:
+      id: 004-create-role-table
+      author: system
+      comment: Create role table
+      preConditions:
+        - onFail: MARK_RAN
+        - not:
+            tableExists:
+              tableName: roles
+      changes:
+        - createTable:
+            tableName: roles
+            columns:
+              - column:
+                  name: id
+                  type: BIGINT
+                  autoIncrement: true
+                  constraints:
+                    primaryKey: true
+                    nullable: false
+              - column:
+                  name: name
+                  type: VARCHAR(50)
+                  constraints:
+                    nullable: false
+                    unique: true
