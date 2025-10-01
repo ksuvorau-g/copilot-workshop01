@@ -5,7 +5,7 @@ databaseChangeLog:
       author: system
       comment: Create currency table
       preConditions:
-        - onFail: MARK_RAN
+        - onFail: WARN
         - not:
             tableExists:
               tableName: currency

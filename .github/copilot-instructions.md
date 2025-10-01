@@ -52,4 +52,10 @@ Editing and testing tips for agents
 - Small edits: run `./mvnw -DskipTests package` to catch compile/annotation processing issues.
 - Run the app locally via VS Code launch or `java -jar` after packaging. Integration tests will likely use random ports only if configured — current test class only checks context load.
 
+Git and version control rules
+- **NEVER commit or push changes unless explicitly asked by the user**. Always wait for clear instruction to commit (e.g., "commit these changes", "push to git", "create a commit").
+- When making changes, stage them and show what was modified, but do NOT automatically commit.
+- If implementing a feature or fix, complete the work and verify it builds/runs, then inform the user and ask if they want to commit.
+- Only use commit messages with issue references (e.g., "Closes #N") when the user explicitly requests closing an issue via commit.
+
 If anything in this file looks incomplete or you want more detail about CI, runtime properties, or example endpoints, tell me which area to expand and I will iterate.
