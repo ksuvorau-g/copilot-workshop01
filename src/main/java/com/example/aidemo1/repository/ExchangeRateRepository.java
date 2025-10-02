@@ -24,9 +24,10 @@ public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Long
      * @param targetCurrency the target currency code
      * @return Optional containing the most recent rate if found
      */
-    @Query("SELECT e FROM ExchangeRate e WHERE e.baseCurrency = :base AND e.targetCurrency = :target ORDER BY e.timestamp DESC LIMIT 1")
-    Optional<ExchangeRate> findLatestRate(@Param("base") String baseCurrency, 
-                                          @Param("target") String targetCurrency);
+    Optional<ExchangeRate> findFirstByBaseCurrencyAndTargetCurrencyOrderByTimestampDesc(
+        String baseCurrency,
+        String targetCurrency
+    );
 
     /**
      * Find all exchange rates for a currency pair within a time range.
