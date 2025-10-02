@@ -61,20 +61,9 @@ public class UnsupportedCurrencyPairException extends RuntimeException {
     }
     
     /**
-     * Constructs a new exception with a custom message.
-     * 
-     * @param message the detail message
-     */
-    public UnsupportedCurrencyPairException(String message) {
-        super(message);
-        this.currencyPair = null;
-        this.providerName = null;
-    }
-    
-    /**
      * Returns the unsupported currency pair.
      * 
-     * @return the currency pair (e.g., "USD/EUR"), or null if not specified
+     * @return the currency pair (e.g., "USD/EUR")
      */
     public String getCurrencyPair() {
         return currencyPair;
@@ -83,7 +72,7 @@ public class UnsupportedCurrencyPairException extends RuntimeException {
     /**
      * Returns the provider name that doesn't support the currency pair.
      * 
-     * @return the provider name, or null if not specified
+     * @return the provider name
      */
     public String getProviderName() {
         return providerName;
