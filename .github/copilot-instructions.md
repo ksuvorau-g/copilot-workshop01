@@ -26,7 +26,6 @@ Project-specific conventions & patterns
 - Lombok is included as an optional dependency in the pom; annotation-processor configured in `maven-compiler-plugin`. The spring-boot repackage step explicitly excludes Lombok from the executable jar (`spring-boot-maven-plugin` excludes lombok). When editing code that uses Lombok, ensure IDE annotation processing is enabled.
 - Artifact/project name is `aidemo1` (pom artifactId). The VS Code `projectName` in `launch.json` matches this; if renaming the module, update the launch config.
 - .gitignore excludes `target/` and `.vscode/` — keep generated/build artifacts out of commits.
-- **Spring Data Repository Query Methods**: Always prefer Spring Data Derived Query Methods over `@Query` annotations. Derived query methods (e.g., `findByUsername`, `existsByCode`, `deleteByName`) are automatically implemented by Spring Data from the method name. Only use `@Query` annotations when the query logic is too complex to express with a derived method name (e.g., complex joins, subqueries, or specific performance optimizations).
 
 Integration & external dependencies
 - Primary dependencies: `spring-boot-starter-web` (embedded web server + MVC), `spring-boot-starter-data-jpa` (JPA/Hibernate), `postgresql` driver.
