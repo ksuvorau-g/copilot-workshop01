@@ -18,8 +18,23 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: aidemo1-redis
+    ports:
+      - "6379:6379"
+    networks:
+      - aidemo-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    volumes:
+      - redis-data:/data
+
   adminer:
-    image: adminer:5.4.0
+    image: adminer:5.4.1
     container_name: aidemo1-adminer
     ports:
       - "8081:8080"
@@ -37,6 +52,8 @@ services:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aidemo
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
     ports:
       - "8080:8080"
     networks:
@@ -44,9 +61,34 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # Mock Provider 1 - placeholder for Phase 3
+  # mock-provider-1:
+  #   build:
+  #     context: ./mock-provider-1
+  #     dockerfile: Dockerfile
+  #   container_name: aidemo1-mock-provider-1
+  #   ports:
+  #     - "8091:8091"
+  #   networks:
+  #     - aidemo-network
+
+  # Mock Provider 2 - placeholder for Phase 3
+  # mock-provider-2:
+  #   build:
+  #     context: ./mock-provider-2
+  #     dockerfile: Dockerfile
+  #   container_name: aidemo1-mock-provider-2
+  #   ports:
+  #     - "8092:8092"
+  #   networks:
+  #     - aidemo-network
 
 volumes:
   postgres-data:
+  redis-data:
 
 networks:
   aidemo-network:
