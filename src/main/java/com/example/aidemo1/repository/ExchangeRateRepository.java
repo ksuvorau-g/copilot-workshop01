@@ -81,9 +81,10 @@ public interface ExchangeRateRepository extends JpaRepository<ExchangeRate, Long
      * @param targetCurrency the target currency code
      * @return Optional containing the best rate if found
      */
+    // NOTE: JPQL does not support LIMIT. To ensure only one result is returned, implement this query in a custom repository using setMaxResults(1).
     @Query("SELECT e FROM ExchangeRate e WHERE e.baseCurrency = :base AND e.targetCurrency = :target " +
            "AND e.timestamp = (SELECT MAX(e2.timestamp) FROM ExchangeRate e2 WHERE e2.baseCurrency = :base AND e2.targetCurrency = :target) " +
-           "ORDER BY e.rate ASC LIMIT 1")
+           "ORDER BY e.rate ASC")
     Optional<ExchangeRate> findBestRate(@Param("base") String baseCurrency,
                                        @Param("target") String targetCurrency);
 
