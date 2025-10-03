@@ -10,8 +10,6 @@ services:
       - "5432:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    networks:
-      - aidemo-network
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -23,8 +21,6 @@ services:
     container_name: aidemo1-redis
     ports:
       - "6379:6379"
-    networks:
-      - aidemo-network
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -38,31 +34,29 @@ services:
     container_name: aidemo1-adminer
     ports:
       - "8081:8080"
-    networks:
-      - aidemo-network
     depends_on:
       - postgres
 
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: aidemo1-app
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aidemo
-      SPRING_DATASOURCE_USERNAME: postgres
-      SPRING_DATASOURCE_PASSWORD: postgres
-      SPRING_REDIS_HOST: redis
-      SPRING_REDIS_PORT: 6379
-    ports:
-      - "8080:8080"
-    networks:
-      - aidemo-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile
+  #   container_name: aidemo1-app
+  #   environment:
+  #     SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/aidemo
+  #     SPRING_DATASOURCE_USERNAME: postgres
+  #     SPRING_DATASOURCE_PASSWORD: postgres
+  #     SPRING_REDIS_HOST: redis
+  #     SPRING_REDIS_PORT: 6379
+  #   ports:
+  #     - "8080:8080"
+  #   networks:
+  #     - aidemo-network
+  #   depends_on:
+  #     postgres:
+  #       condition: service_healthy
+  #     redis:
+  #       condition: service_healthy
 
   # Mock Provider 1 - placeholder for Phase 3
   # mock-provider-1:
@@ -89,7 +83,3 @@ services:
 volumes:
   postgres-data:
   redis-data:
-
-networks:
-  aidemo-network:
-    driver: bridge

@@ -6,7 +6,6 @@ import com.example.aidemo1.exception.UnsupportedCurrencyPairException;
 import com.example.aidemo1.integration.client.FixerClient;
 import com.example.aidemo1.integration.dto.external.FixerResponse;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Component;
