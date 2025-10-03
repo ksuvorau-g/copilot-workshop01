@@ -43,7 +43,7 @@ public class ExchangeRatesApiClient {
      * @throws ExternalProviderException if API call fails
      */
     public ExchangeRatesApiResponse getExchangeRate(String from, String to) {
-        String url = UriComponentsBuilder.fromHttpUrl(baseUrl + "/latest")
+        String url = UriComponentsBuilder.fromUriString(baseUrl + "/latest")
                 .queryParam("access_key", apiKey)
                 .queryParam("base", from)
                 .queryParam("symbols", to)
