@@ -28,18 +28,24 @@ Project-specific conventions & patterns
 - .gitignore excludes `target/` and `.vscode/` — keep generated/build artifacts out of commits.
 
 Integration & external dependencies
-- Primary dependencies: `spring-boot-starter-web` (embedded web server + MVC), `spring-boot-starter-data-jpa` (JPA/Hibernate), `postgresql` driver.
+- Primary dependencies: `spring-boot-starter-web` (embedded web server + MVC), `spring-boot-starter-data-jpa` (JPA/Hibernate), `spring-boot-starter-security` (authentication/authorization), `spring-boot-starter-data-redis` (caching), `postgresql` driver, `liquibase` (database migrations).
 - PostgreSQL database configured via environment variables (SPRING_DATASOURCE_URL, SPRING_DATASOURCE_USERNAME, SPRING_DATASOURCE_PASSWORD) with sensible defaults for local dev.
-- Docker Compose orchestrates three services: postgres (port 5432), app (port 8080), adminer (port 8081).
+- Redis cache configured for exchange rate caching.
+- Spring Security configured with form-based login and HTTP Basic authentication.
+- **Test users**: Three test users are auto-created via Liquibase: `user/user` (ROLE_USER), `admin/admin` (ROLE_ADMIN), `prem/prem` (ROLE_PREMIUM_USER). See `docs/TEST-USERS.md` for details.
+- Docker Compose orchestrates six services: postgres (port 5432), redis (port 6379), app (port 8080), adminer (port 8081), mock-provider-1 (port 8091), mock-provider-2 (port 8092).
 - No CI configuration detected. If you add CI, prefer using the Maven wrapper (`./mvnw`) to guarantee consistent Maven version.
 
 Key files to reference
-- `pom.xml` — dependency and build plugin decisions (Lombok handling, spring-boot repackage, PostgreSQL driver, JPA).
-- `docker compose.yml` — orchestrates PostgreSQL, Spring Boot app, and Adminer containers.
+- `pom.xml` — dependency and build plugin decisions (Lombok handling, spring-boot repackage, PostgreSQL driver, JPA, Security, Redis).
+- `docker compose.yml` — orchestrates PostgreSQL, Redis, Spring Boot app, Adminer, and mock providers.
 - `Dockerfile` — multi-stage build for Spring Boot app (Maven build + JRE runtime).
 - `src/main/java/com/example/aidemo1/Aidemo1Application.java` — application entrypoint.
 - `src/main/resources/application.properties` — runtime configuration including database connection with env var overrides.
+- `src/main/resources/db/changelog/` — Liquibase database migrations (8 changesets including test users).
 - `src/test/java/com/example/aidemo1/Aidemo1ApplicationTests.java` — example test scaffold.
+- `docs/architecture-plan.md` — comprehensive architecture and implementation plan.
+- `docs/TEST-USERS.md` — test credentials for development (user/user, admin/admin, prem/prem).
 - `.vscode/launch.json` — local debug/run config (created for this repo).
 - `.mvn/wrapper/maven-wrapper.properties` and `mvnw` — use wrapper for reproducible builds.
 

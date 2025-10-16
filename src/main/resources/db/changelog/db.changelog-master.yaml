@@ -13,3 +13,7 @@ databaseChangeLog:
       file: db/changelog/changes/006-add-indexes.yaml
   - include:
       file: db/changelog/changes/007-insert-default-roles.yaml
+  - include:
+      file: db/changelog/changes/008-insert-test-users.yaml
+  - include:
+      file: db/changelog/changes/009-fix-test-user-passwords.yaml

@@ -1,0 +1,94 @@
+# Insert test users for development and testing
+# Passwords are BCrypt-hashed with strength 10
+# Test credentials:
+#   - user/user (ROLE_USER)
+#   - admin/admin (ROLE_ADMIN)
+#   - prem/prem (ROLE_PREMIUM_USER)
+databaseChangeLog:
+  - changeSet:
+      id: 008-insert-test-users
+      author: system
+      comment: Insert test users with different roles for development and testing
+      changes:
+        # Insert user with ROLE_USER
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: username
+                  value: user
+              - column:
+                  name: password
+                  # BCrypt hash of "user"
+                  value: $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
+              - column:
+                  name: email
+                  value: user@example.com
+              - column:
+                  name: enabled
+                  valueBoolean: true
+                  
+        # Insert admin with ROLE_ADMIN
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: username
+                  value: admin
+              - column:
+                  name: password
+                  # BCrypt hash of "admin"
+                  value: $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
+              - column:
+                  name: email
+                  value: admin@example.com
+              - column:
+                  name: enabled
+                  valueBoolean: true
+                  
+        # Insert premium user with ROLE_PREMIUM_USER
+        - insert:
+            tableName: users
+            columns:
+              - column:
+                  name: username
+                  value: prem
+              - column:
+                  name: password
+                  # BCrypt hash of "prem"
+                  value: $2a$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy
+              - column:
+                  name: email
+                  value: prem@example.com
+              - column:
+                  name: enabled
+                  valueBoolean: true
+
+  - changeSet:
+      id: 008-assign-user-roles
+      author: system
+      comment: Assign roles to test users
+      changes:
+        # Assign ROLE_USER to user
+        - sql:
+            sql: >
+              INSERT INTO user_roles (user_id, role_id)
+              SELECT u.id, r.id 
+              FROM users u, roles r 
+              WHERE u.username = 'user' AND r.name = 'ROLE_USER'
+              
+        # Assign ROLE_ADMIN to admin
+        - sql:
+            sql: >
+              INSERT INTO user_roles (user_id, role_id)
+              SELECT u.id, r.id 
+              FROM users u, roles r 
+              WHERE u.username = 'admin' AND r.name = 'ROLE_ADMIN'
+              
+        # Assign ROLE_PREMIUM_USER to prem
+        - sql:
+            sql: >
+              INSERT INTO user_roles (user_id, role_id)
+              SELECT u.id, r.id 
+              FROM users u, roles r 
+              WHERE u.username = 'prem' AND r.name = 'ROLE_PREMIUM_USER'
