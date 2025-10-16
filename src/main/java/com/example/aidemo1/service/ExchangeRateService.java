@@ -39,6 +39,26 @@ public interface ExchangeRateService {
     BigDecimal getExchangeRate(String from, String to, BigDecimal amount);
 
     /**
+     * Gets the exchange rate entity for a currency pair using cache-first strategy.
+     * 
+     * <p>Lookup strategy:</p>
+     * <ol>
+     *   <li>Check Redis cache</li>
+     *   <li>If not cached, check database for recent rate (within last hour)</li>
+     *   <li>If no recent rate, fetch from providers via RateAggregator</li>
+     *   <li>Cache and save the fetched rate</li>
+     * </ol>
+     *
+     * @param from the base currency code (e.g., "USD")
+     * @param to   the target currency code (e.g., "EUR")
+     * @return the exchange rate entity with provider and timestamp information
+     * @throws com.example.aidemo1.exception.CurrencyNotFoundException if currency doesn't exist
+     * @throws com.example.aidemo1.exception.ExchangeRateNotFoundException if rate cannot be obtained
+     * @throws IllegalArgumentException if inputs are invalid
+     */
+    ExchangeRate getExchangeRateEntity(String from, String to);
+
+    /**
      * Refreshes exchange rates for all supported currency pairs.
      * 
      * <p>This method:</p>

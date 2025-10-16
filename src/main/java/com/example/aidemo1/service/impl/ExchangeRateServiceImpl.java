@@ -67,6 +67,20 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
         validateCurrencyCodes(from, to);
         validateAmount(amount);
 
+        // Get the exchange rate entity (cache-first)
+        ExchangeRate rate = getExchangeRateEntity(from, to);
+        
+        // Calculate and return converted amount
+        return calculateConvertedAmount(amount, rate.getRate());
+    }
+
+    @Override
+    public ExchangeRate getExchangeRateEntity(String from, String to) {
+        logger.debug("Getting exchange rate entity: {} -> {}", from, to);
+
+        // Validate inputs
+        validateCurrencyCodes(from, to);
+
         // Validate currencies exist
         validateCurrenciesExist(from, to);
 
@@ -74,7 +88,7 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
         var cachedRate = rateCacheService.getCachedRate(from, to);
         if (cachedRate.isPresent()) {
             logger.info("Cache hit for {} -> {}", from, to);
-            return calculateConvertedAmount(amount, cachedRate.get().getRate());
+            return cachedRate.get();
         }
 
         logger.debug("Cache miss for {} -> {}", from, to);
@@ -86,14 +100,13 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
             var rate = dbRate.get();
             // Update cache with database rate
             rateCacheService.cacheRate(from, to, rate);
-            return calculateConvertedAmount(amount, rate.getRate());
+            return rate;
         }
 
         logger.debug("No recent rate in database for {} -> {}, fetching from providers", from, to);
 
         // Step 3: Fetch from providers
-        var freshRate = fetchFreshRate(from, to);
-        return calculateConvertedAmount(amount, freshRate.getRate());
+        return fetchFreshRate(from, to);
     }
 
     @Override

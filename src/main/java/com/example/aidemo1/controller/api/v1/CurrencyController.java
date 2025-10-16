@@ -17,7 +17,6 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -108,26 +107,25 @@ public class CurrencyController {
         String fromUpper = from.trim().toUpperCase();
         String toUpper = to.trim().toUpperCase();
         
-        // Get the best rate for this currency pair
-        ExchangeRate bestRate = exchangeRateService.getBestRate(fromUpper, toUpper);
+        // Get exchange rate entity using cache-first strategy (Cache → Database → Providers)
+        ExchangeRate rateEntity = exchangeRateService.getExchangeRateEntity(fromUpper, toUpper);
         
         // Calculate converted amount
-        BigDecimal convertedAmount = amount.multiply(bestRate.getRate())
-                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal convertedAmount = exchangeRateService.getExchangeRate(fromUpper, toUpper, amount);
         
-        // Build response
+        // Build response using cached data (no additional database query)
         ExchangeRateResponse response = ExchangeRateResponse.builder()
                 .from(fromUpper)
                 .to(toUpper)
                 .amount(amount)
-                .rate(bestRate.getRate())
+                .rate(rateEntity.getRate())
                 .convertedAmount(convertedAmount)
-                .provider(bestRate.getProvider())
-                .timestamp(bestRate.getTimestamp())
+                .provider(rateEntity.getProvider())
+                .timestamp(rateEntity.getTimestamp())
                 .build();
         
         log.info("GET /api/v1/currencies/exchange-rates - Successfully calculated: {} {} = {} {} (rate: {}, provider: {})",
-                amount, fromUpper, convertedAmount, toUpper, bestRate.getRate(), bestRate.getProvider());
+                amount, fromUpper, convertedAmount, toUpper, rateEntity.getRate(), rateEntity.getProvider());
         
         return ResponseEntity.ok(response);
     }
