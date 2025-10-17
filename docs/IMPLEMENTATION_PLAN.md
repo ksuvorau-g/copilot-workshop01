@@ -1,10 +1,10 @@
 # Implementation Plan
 ## Currency Exchange Rates Provider Service
 
-**Based on:** SRS v1.0  
+**Based on:** SRS v1.1  
 **Date:** October 17, 2025  
 **Project:** aidemo1  
-**Technology Stack:** Spring Boot 3.5.6, Java 25, PostgreSQL 17
+**Technology Stack:** Spring Boot 3.5.6, Java 25, PostgreSQL 17, Redis
 
 ---
 
@@ -24,6 +24,7 @@
 - ✅ Configure application.properties
 - ✅ Create Dockerfile and docker-compose.yml
 - ✅ Configure PostgreSQL 17 database connection
+- ❌ Configure Redis cache connection
 - ✅ Set up Adminer for database management
 
 **Files:**
@@ -168,14 +169,84 @@
 - ✅ Implement rate freshness check (1-hour window)
 - ✅ Integrate with RateAggregatorService
 - ✅ Add database caching logic
+- ❌ Integrate with Redis caching layer (NOT IMPLEMENTED)
 - ✅ Add @Transactional annotations
 - ✅ Add logging with @Slf4j
 
-**Status:** Core functionality implemented, trend analysis missing
+**Status:** Core functionality implemented, trend analysis and Redis caching missing
 
 **Files:**
 - `service/ExchangeRateService.java` ✅
-- `service/impl/ExchangeRateServiceImpl.java` 🔄 (missing trends method)
+- `service/impl/ExchangeRateServiceImpl.java` 🔄 (missing trends method and Redis integration)
+
+---
+
+## Phase 2.5: Caching Layer (Redis) ❌
+
+### 2.5.1 Redis Configuration ❌
+- ❌ Add Spring Data Redis dependency to pom.xml
+- ❌ Add Lettuce driver dependency (included with Spring Data Redis)
+- ❌ Configure Redis connection in application.properties:
+  - ❌ `spring.data.redis.host`
+  - ❌ `spring.data.redis.port`
+  - ❌ `spring.data.redis.timeout`
+- ❌ Create `RedisConfig` configuration class
+- ❌ Configure `RedisTemplate` bean with JSON serialization
+- ❌ Configure Jackson for ExchangeRate serialization
+- ❌ Set up connection factory (LettuceConnectionFactory)
+
+**Files to Create:**
+- `config/RedisConfig.java` ❌
+- `pom.xml` (add dependencies) ❌
+- `application.properties` (Redis config) ❌
+
+---
+
+### 2.5.2 Cache Service Implementation ❌
+- ❌ Create `RateCacheService` interface
+- ❌ Implement `RateCacheServiceImpl`
+- ❌ Method: `getCachedRate(String from, String to)` - Retrieve from cache
+- ❌ Method: `cacheRate(ExchangeRate rate)` - Store in cache with TTL
+- ❌ Method: `clearCache()` - Clear all cached rates
+- ❌ Method: `clearCacheForPair(String from, String to)` - Clear specific pair
+- ❌ Implement cache key generation: `exchange_rate:{from}:{to}`
+- ❌ Set TTL to 3600 seconds (1 hour)
+- ❌ Add graceful degradation (catch Redis exceptions, log warnings)
+- ❌ Add @Slf4j for logging
+- ❌ Return Optional<ExchangeRate> from get methods
+
+**Files to Create:**
+- `cache/RateCacheService.java` ❌
+- `cache/impl/RateCacheServiceImpl.java` ❌
+
+---
+
+### 2.5.3 Integrate Cache with ExchangeRateService ❌
+- ❌ Inject `RateCacheService` into `ExchangeRateServiceImpl`
+- ❌ Update `getExchangeRate()` flow:
+  1. ❌ Check Redis cache first
+  2. ❌ On cache hit: Return cached rate
+  3. ❌ On cache miss: Check database
+  4. ❌ If database has fresh rate: Cache it and return
+  5. ❌ If no fresh rate: Fetch from providers → Save to DB → Cache best rate → Return
+- ❌ Update `refreshExchangeRates()` to clear cache before refresh
+- ❌ Cache the best rate after provider aggregation
+- ❌ Add try-catch for Redis failures (continue without cache)
+- ❌ Add logging for cache hits/misses
+
+**Files to Update:**
+- `service/impl/ExchangeRateServiceImpl.java` ❌
+
+---
+
+### 2.5.4 Update Scheduler for Cache Management ❌
+- ❌ Update `ExchangeRateScheduler.refreshRates()`
+- ❌ Clear Redis cache at start of scheduled refresh
+- ❌ Cache new rates after fetching from providers
+- ❌ Add logging for cache operations
+
+**Files to Update:**
+- `scheduler/ExchangeRateScheduler.java` ❌
 
 ---
 
@@ -387,18 +458,31 @@
 
 ## Phase 7: Testing Strategy ✅
 
-### 7.1 Unit Tests ✅
+### 7.1 Unit Tests 🔄
 - ✅ Test `CurrencyServiceImpl`:
   - ✅ getAllCurrencies() - success case
   - ✅ addCurrency() - success case
   - ✅ addCurrency() - duplicate currency exception
   - ✅ getCurrencyByCode() - found
   - ✅ getCurrencyByCode() - not found exception
-- ✅ Test `ExchangeRateServiceImpl`:
-  - ✅ getExchangeRate() - fresh cache hit
+- 🔄 Test `ExchangeRateServiceImpl`:
+  - ✅ getExchangeRate() - fresh database cache hit
   - ✅ getExchangeRate() - stale cache, fetch from providers
   - ✅ getExchangeRate() - no cache, fetch from providers
+  - ❌ getExchangeRate() - Redis cache hit (NOT TESTED)
+  - ❌ getExchangeRate() - Redis cache miss, database hit (NOT TESTED)
+  - ❌ getExchangeRate() - Redis unavailable, fallback to database (NOT TESTED)
   - ✅ refreshExchangeRates() - success
+  - ❌ refreshExchangeRates() - with cache clearing (NOT TESTED)
+- ❌ Test `RateCacheServiceImpl`:
+  - ❌ getCachedRate() - cache hit
+  - ❌ getCachedRate() - cache miss
+  - ❌ cacheRate() - success
+  - ❌ cacheRate() - Redis unavailable (graceful degradation)
+  - ❌ clearCache() - success
+  - ❌ clearCacheForPair() - success
+  - ❌ Cache key format validation
+  - ❌ TTL expiration verification
 - ✅ Test `RateAggregatorService`:
   - ✅ fetchBestRate() - multiple providers, select lowest
   - ✅ fetchBestRate() - tie-breaker by priority
@@ -415,7 +499,8 @@
 
 **Files:**
 - `test/.../service/impl/CurrencyServiceImplTest.java` ✅
-- `test/.../service/impl/ExchangeRateServiceImplTest.java` ✅
+- `test/.../service/impl/ExchangeRateServiceImplTest.java` 🔄 (needs Redis tests)
+- `test/.../cache/impl/RateCacheServiceImplTest.java` ❌
 - `test/.../integration/aggregator/RateAggregatorServiceTest.java` ✅
 - `test/.../integration/provider/FixerProviderTest.java` ✅
 - `test/.../integration/provider/ExchangeRatesApiProviderTest.java` ✅
@@ -447,7 +532,7 @@
 
 ---
 
-### 7.3 Integration Tests ✅
+### 7.3 Integration Tests 🔄
 - ✅ Test `SecurityConfig`:
   - ✅ Public endpoints accessible without auth
   - ✅ Protected endpoints require authentication
@@ -455,13 +540,20 @@
 - ✅ Test `RateAggregatorService` integration:
   - ✅ Full provider integration test
 - ✅ Test scheduler execution
+- ❌ Test Redis integration:
+  - ❌ Full cache flow with TestContainers Redis
+  - ❌ Cache persistence across requests
+  - ❌ Cache invalidation on refresh
+  - ❌ Redis unavailable scenario
 - ✅ Use @SpringBootTest for full context
 - ✅ Use TestContainers for PostgreSQL (optional)
+- ❌ Use TestContainers for Redis (NOT IMPLEMENTED)
 
 **Files:**
 - `test/.../config/SecurityConfigTest.java` ✅
 - `test/.../integration/aggregator/RateAggregatorServiceIntegrationTest.java` ✅
 - `test/.../scheduler/ExchangeRateSchedulerTest.java` ✅
+- `test/.../integration/cache/RedisCacheIntegrationTest.java` ❌
 - `test/.../Aidemo1ApplicationTests.java` ✅
 
 ---
@@ -536,18 +628,24 @@
 
 ---
 
-### 8.3 Caching Optimization ❌ NOT IMPLEMENTED (Optional)
-- ❌ Add Spring Cache abstraction (@EnableCaching)
-- ❌ Cache `CurrencyService.getAllCurrencies()`
-- ❌ Cache `ExchangeRateService.getExchangeRate()` with TTL
-- ❌ Configure cache eviction strategy
-- ❌ Add cache statistics/monitoring
+### 8.3 Redis Caching Layer ❌ NOT IMPLEMENTED (REQUIRED)
+- ❌ Add Spring Data Redis integration
+- ❌ Implement `RateCacheService` for Redis operations
+- ❌ Cache `ExchangeRateService.getExchangeRate()` with 1-hour TTL
+- ❌ Implement cache-aside pattern (check cache → database → providers)
+- ❌ Configure cache key format: `exchange_rate:{from}:{to}`
+- ❌ Implement graceful degradation when Redis unavailable
+- ❌ Clear cache on manual and scheduled refresh operations
+- ❌ Add comprehensive tests (unit + integration with TestContainers)
 
-**Impact:** LOW - Performance optimization  
-**Priority:** LOW - Optional enhancement
+**Impact:** HIGH - Required per SRS v1.1 Section 3.6  
+**Priority:** HIGH - Performance and scalability requirement
 
 **Files to Create:**
-- `config/CacheConfig.java` ❌
+- `config/RedisConfig.java` ❌
+- `cache/RateCacheService.java` ❌
+- `cache/impl/RateCacheServiceImpl.java` ❌
+- Tests for caching functionality ❌
 
 ---
 
@@ -567,20 +665,24 @@
 
 ## Phase 9: Deployment & Documentation ✅
 
-### 9.1 Docker Deployment ✅
+### 9.1 Docker Deployment 🔄
 - ✅ Create Dockerfile for Spring Boot application
-- ✅ Create docker-compose.yml with:
+- 🔄 Create docker-compose.yml with:
   - ✅ PostgreSQL service
+  - ❌ Redis service (NOT CONFIGURED)
   - ✅ Adminer service
   - ✅ Application service
   - ✅ Mock provider services (if separate containers)
 - ✅ Configure environment variables
+- ❌ Add Redis environment variables to application service
 - ✅ Set up Docker networking
-- ✅ Test full stack deployment
+- 🔄 Test full stack deployment (needs Redis)
+
+**Status:** Needs Redis service addition
 
 **Files:**
 - `Dockerfile` ✅
-- `docker-compose.yml` ✅
+- `docker-compose.yml` 🔄 (needs Redis service)
 
 ---
 
@@ -643,8 +745,8 @@
 
 ## Summary of Current Status
 
-### ✅ **Completed Features (85%)**
-1. ✅ Project foundation & infrastructure
+### ✅ **Completed Features (80%)**
+1. ✅ Project foundation & infrastructure (without Redis)
 2. ✅ Database schema with Liquibase
 3. ✅ Entity, Repository, and Service layers
 4. ✅ All 4 exchange rate providers (2 real + 2 mock)
@@ -652,20 +754,29 @@
 6. ✅ REST API endpoints (except trends)
 7. ✅ Security & authentication (form + HTTP Basic)
 8. ✅ Mock provider endpoints
-9. ✅ Scheduled hourly rate refresh
-10. ✅ Comprehensive unit tests
+9. ✅ Scheduled hourly rate refresh (without cache clearing)
+10. ✅ Comprehensive unit tests (for existing features)
 11. ✅ Controller tests
-12. ✅ Integration tests
-13. ✅ Docker deployment setup
+12. ✅ Integration tests (without Redis)
+13. ✅ Docker deployment setup (without Redis)
 14. ✅ Swagger/OpenAPI documentation
 
-### ❌ **Missing Critical Features (10%)**
-1. ❌ **Trend Analysis Feature** (SRS Section 3.3) - HIGH PRIORITY
+### ❌ **Missing Critical Features (15%)**
+1. ❌ **Redis Caching Layer** (SRS v1.1 Section 3.6) - HIGH PRIORITY
+   - Redis configuration and Docker service
+   - RateCacheService implementation
+   - Cache-aside pattern integration
+   - Cache key format: `exchange_rate:{from}:{to}`
+   - 1-hour TTL implementation
+   - Graceful degradation on Redis failure
+   - Cache clearing on refresh operations
+   - TestContainers for Redis testing
+2. ❌ **Trend Analysis Feature** (SRS Section 3.3) - HIGH PRIORITY
    - GET `/api/v1/currencies/trends` endpoint
    - Trend calculation logic
    - TrendResponse DTO
    - Security configuration update
-2. ❌ **Global Exception Handler** - HIGH PRIORITY
+3. ❌ **Global Exception Handler** - HIGH PRIORITY
    - @RestControllerAdvice implementation
    - Standardized error responses
    - HTTP status code mapping
@@ -673,6 +784,8 @@
 ### 🔄 **Partially Implemented (5%)**
 1. 🔄 Error response DTO exists but not fully integrated
 2. 🔄 Code coverage tooling not fully configured
+3. 🔄 Docker Compose missing Redis service
+4. 🔄 ExchangeRateService needs Redis integration
 
 ### ❌ **Optional Enhancements (Not Started)**
 1. ❌ Caching optimization (Spring Cache)
@@ -685,23 +798,60 @@
 
 ## Next Steps (Recommended Priority)
 
-### Immediate Actions (To Complete SRS Requirements)
-1. **Implement Trend Analysis Feature** (2-4 hours)
+### Immediate Actions (To Complete SRS v1.1 Requirements)
+
+#### 1. **Implement Redis Caching Layer** (4-6 hours) - HIGHEST PRIORITY
+   **Phase A: Infrastructure (1-2 hours)**
+   - Add Spring Data Redis and Lettuce dependencies to pom.xml
+   - Create RedisConfig class with RedisTemplate and serialization
+   - Add Redis service to docker-compose.yml
+   - Update application.properties with Redis connection settings
+   - Test Redis connectivity
+
+   **Phase B: Cache Service (1-2 hours)**
+   - Create RateCacheService interface
+   - Implement RateCacheServiceImpl with:
+     - `getCachedRate(from, to)` with key format `exchange_rate:{from}:{to}`
+     - `cacheRate(ExchangeRate)` with 3600s TTL
+     - `clearCache()` for full cache invalidation
+     - Graceful degradation (try-catch, log warnings)
+
+   **Phase C: Integration (1 hour)**
+   - Update ExchangeRateServiceImpl:
+     - Check Redis cache first
+     - Fall back to database on cache miss
+     - Cache best rate after provider fetch
+   - Update ExchangeRateScheduler to clear cache before refresh
+   - Update refreshExchangeRates() to clear cache
+
+   **Phase D: Testing (1-2 hours)**
+   - Write unit tests for RateCacheServiceImpl
+   - Update ExchangeRateServiceImpl tests with Redis mocks
+   - Write integration tests with TestContainers Redis:
+     - Cache hit/miss scenarios
+     - TTL expiration
+     - Cache invalidation
+     - Redis unavailable (degraded mode)
+     - Concurrent access
+
+#### 2. **Implement Trend Analysis Feature** (2-4 hours)
    - Create TrendResponse DTO
    - Add getTrends() method to ExchangeRateService
    - Add GET /api/v1/currencies/trends endpoint
    - Update SecurityConfig
    - Write comprehensive tests
 
-2. **Implement Global Exception Handler** (1-2 hours)
+#### 3. **Implement Global Exception Handler** (1-2 hours)
    - Create GlobalExceptionHandler with @RestControllerAdvice
    - Map all exceptions to appropriate HTTP status codes
    - Integrate ErrorResponse DTO
    - Write tests
 
-3. **Update Documentation** (30 minutes)
+#### 4. **Update Documentation** (30 minutes)
+   - Document Redis caching in README
    - Document trends endpoint in README
    - Update API examples
+   - Add Redis monitoring commands
    - Note any limitations
 
 ### Short-term Improvements (Nice to Have)
@@ -726,17 +876,45 @@
 ## Risk Assessment
 
 ### High Risk Items
+- ❌ **Redis Caching Missing**: Required per SRS v1.1, impacts performance and scalability
 - ❌ **Trend Analysis Missing**: Required per SRS, premium feature not available
 - ❌ **No Global Exception Handler**: API error responses inconsistent
 
 ### Medium Risk Items
 - 🔄 **Partial Error Handling**: Some exceptions may not be properly handled
+- 🔄 **Database Load**: Without Redis cache, database will handle all repeated queries
 - ❌ **No Production Security**: HTTPS, CORS, rate limiting not configured
 
 ### Low Risk Items
-- ❌ **No Caching**: Performance may be suboptimal under high load
-- ❌ **No Metrics**: Limited observability in production
+- ❌ **No Advanced Metrics**: Limited observability in production
+- ❌ **No Cache Monitoring**: No visibility into cache hit/miss ratios
+
+---
+
+### 10.4 Cache Monitoring & Observability ❌
+- ❌ Add Redis INFO command monitoring
+- ❌ Track cache hit/miss ratios
+- ❌ Monitor cache memory usage
+- ❌ Add cache metrics to Spring Boot Actuator
+- ❌ Set up alerts for Redis unavailability
+- ❌ Monitor TTL effectiveness
+
+---
+
+## Estimated Effort to Complete SRS v1.1
+
+| Feature | Estimated Hours | Priority | Status |
+|---------|----------------|----------|--------|
+| Redis Caching Layer | 4-6 hours | CRITICAL | ❌ Not Started |
+| Trend Analysis | 2-4 hours | HIGH | ❌ Not Started |
+| Global Exception Handler | 1-2 hours | HIGH | ❌ Not Started |
+| Documentation Updates | 0.5 hours | MEDIUM | ❌ Not Started |
+| Code Coverage Config | 0.5 hours | MEDIUM | 🔄 Partial |
+| **TOTAL** | **8.5-13 hours** | | |
+
+**Target Completion:** 1-2 working days for full SRS v1.1 compliance
 
 ---
 
 **End of Implementation Plan**
+**Last Updated:** October 17, 2025 (SRS v1.1 - Redis Caching Added)
