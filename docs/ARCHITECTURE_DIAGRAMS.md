@@ -490,25 +490,25 @@ sequenceDiagram
 
 ```mermaid
 graph TB
-    subgraph "Public Access"
-        P1[GET /api/v1/currencies]
-        P2[GET /api/v1/currencies/exchange-rates]
-        P3[/mock/**]
-        P4[/swagger-ui.html]
-        P5[/actuator/health]
+    subgraph PublicAccess["Public Access"]
+        P1["GET /api/v1/currencies"]
+        P2["GET /api/v1/currencies/exchange-rates"]
+        P3["/mock/**"]
+        P4["/swagger-ui.html"]
+        P5["/actuator/health"]
     end
     
-    subgraph "USER + PREMIUM_USER + ADMIN"
+    subgraph AuthenticatedAccess["USER + PREMIUM_USER + ADMIN"]
         U1[Authenticated Endpoints]
     end
     
-    subgraph "PREMIUM_USER + ADMIN Only"
-        PR1[GET /api/v1/currencies/trends]
+    subgraph PremiumAccess["PREMIUM_USER + ADMIN Only"]
+        PR1["GET /api/v1/currencies/trends"]
     end
     
-    subgraph "ADMIN Only"
-        A1[POST /api/v1/currencies]
-        A2[POST /api/v1/currencies/refresh]
+    subgraph AdminAccess["ADMIN Only"]
+        A1["POST /api/v1/currencies"]
+        A2["POST /api/v1/currencies/refresh"]
     end
     
     ANYONE[Any User] --> P1
@@ -543,27 +543,27 @@ graph TB
 
 ```mermaid
 graph TB
-    subgraph "Provider Interface"
-        INT[ExchangeRateProvider<br/>- fetchRate<br/>- supports<br/>- getProviderName<br/>- getPriority]
+    subgraph ProviderInterface["Provider Interface"]
+        INT["ExchangeRateProvider<br/>fetchRate, supports,<br/>getProviderName, getPriority"]
     end
     
-    subgraph "Real Providers"
-        FP[FixerProvider<br/>Priority: 100]
-        EP[ExchangeRatesApiProvider<br/>Priority: 100]
+    subgraph RealProviders["Real Providers"]
+        FP["FixerProvider<br/>Priority: 100"]
+        EP["ExchangeRatesApiProvider<br/>Priority: 100"]
     end
     
-    subgraph "Mock Providers"
-        MP1[MockProvider1<br/>Priority: 50]
-        MP2[MockProvider2<br/>Priority: 50]
+    subgraph MockProviders["Mock Providers"]
+        MP1["MockProvider1<br/>Priority: 50"]
+        MP2["MockProvider2<br/>Priority: 50"]
     end
     
-    subgraph "HTTP Clients"
-        FC[FixerClient<br/>RestTemplate]
-        EC[ExchangeRatesApiClient<br/>RestTemplate]
+    subgraph HTTPClients["HTTP Clients"]
+        FC["FixerClient<br/>RestTemplate"]
+        EC["ExchangeRatesApiClient<br/>RestTemplate"]
     end
     
-    subgraph "Retry Logic"
-        RT[@Retryable<br/>maxAttempts: 3<br/>backoff: 1s, 2s, 4s]
+    subgraph RetryLogic["Retry Logic"]
+        RT["@Retryable<br/>maxAttempts: 3<br/>backoff: 1s, 2s, 4s"]
     end
     
     INT -.implements.-> FP
@@ -591,11 +591,11 @@ graph TB
 
 ```mermaid
 flowchart TD
-    START[Receive Request: USD → EUR] --> FETCH[Fetch from all providers]
+    START["Receive Request: USD to EUR"] --> FETCH[Fetch from all providers]
     
-    FETCH --> P1[Provider1: 0.85, Priority: 100]
-    FETCH --> P2[Provider2: 0.87, Priority: 100]
-    FETCH --> P3[Provider3: 0.85, Priority: 50]
+    FETCH --> P1["Provider1: 0.85, Priority: 100"]
+    FETCH --> P2["Provider2: 0.87, Priority: 100"]
+    FETCH --> P3["Provider3: 0.85, Priority: 50"]
     FETCH --> P4[Provider4: FAILED]
     
     P1 --> COLLECT[Collect successful rates]
@@ -614,7 +614,7 @@ flowchart TD
     SELECT1 --> SAVE[Save ALL rates to database]
     SELECT2 --> SAVE
     
-    SAVE --> RETURN[Return best rate: 0.85 from Provider1<br/>Priority: 100]
+    SAVE --> RETURN["Return best rate: 0.85 from Provider1<br/>Priority: 100"]
     
     style START fill:#e3f2fd
     style FETCH fill:#fff3e0
@@ -823,10 +823,10 @@ sequenceDiagram
 graph TB
     START[Spring Container Initialization] --> SCAN[Component Scanning]
     
-    SCAN --> FIND1[@Component FixerProvider]
-    SCAN --> FIND2[@Component ExchangeRatesApiProvider]
-    SCAN --> FIND3[@Component MockProvider1]
-    SCAN --> FIND4[@Component MockProvider2]
+    SCAN --> FIND1["@Component FixerProvider"]
+    SCAN --> FIND2["@Component ExchangeRatesApiProvider"]
+    SCAN --> FIND3["@Component MockProvider1"]
+    SCAN --> FIND4["@Component MockProvider2"]
     
     FIND1 --> REG[Register as ExchangeRateProvider beans]
     FIND2 --> REG
@@ -834,7 +834,7 @@ graph TB
     FIND4 --> REG
     
     REG --> AGG[RateAggregatorService constructor]
-    AGG --> INJECT[Inject List<ExchangeRateProvider>]
+    AGG --> INJECT["Inject List of ExchangeRateProvider"]
     
     INJECT --> READY[All providers available in aggregator]
     
@@ -854,13 +854,13 @@ graph TB
 graph TB
     EXC[Exception Thrown] --> TYPE{Exception Type}
     
-    TYPE -->|Validation Error| VAL[@Valid annotation failed]
+    TYPE -->|Validation Error| VAL["@Valid annotation failed"]
     TYPE -->|Business Logic| BUS[Custom Runtime Exception]
     TYPE -->|External API| EXT[ExternalProviderException]
     TYPE -->|Not Found| NF[Entity not found]
     TYPE -->|Duplicate| DUP[Unique constraint violation]
     
-    VAL --> ADV[@RestControllerAdvice]
+    VAL --> ADV["@RestControllerAdvice"]
     BUS --> ADV
     EXT --> ADV
     NF --> ADV
@@ -880,7 +880,7 @@ graph TB
     R500 --> JSON
     R503 --> JSON
     
-    JSON --> RESP[{<br/>timestamp,<br/>status,<br/>error,<br/>message,<br/>path<br/>}]
+    JSON --> RESP["Response:<br/>timestamp, status,<br/>error, message, path"]
     
     style EXC fill:#ffcdd2
     style ADV fill:#fff3e0
