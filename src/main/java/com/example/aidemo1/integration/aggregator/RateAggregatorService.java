@@ -159,7 +159,8 @@ public class RateAggregatorService {
     @Transactional
     public Map<String, ExchangeRate> fetchAndAggregateMultiple(String from, List<String> targets) {
         validateCurrencyCode(from, "Base currency");
-        
+
+
         if (targets == null || targets.isEmpty()) {
             throw new IllegalArgumentException("Target currencies list cannot be null or empty");
         }

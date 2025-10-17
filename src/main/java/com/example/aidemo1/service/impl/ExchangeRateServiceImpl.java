@@ -1,6 +1,5 @@
 package com.example.aidemo1.service.impl;
 
-import com.example.aidemo1.cache.RateCacheService;
 import com.example.aidemo1.entity.Currency;
 import com.example.aidemo1.entity.ExchangeRate;
 import com.example.aidemo1.exception.CurrencyNotFoundException;
@@ -21,8 +20,8 @@ import java.util.*;
 
 /**
  * Implementation of ExchangeRateService.
- * Manages exchange rate operations with a three-tier lookup strategy:
- * Cache → Database → External Providers.
+ * Manages exchange rate operations with a two-tier lookup strategy:
+ * Database → External Providers.
  */
 @Service
 @Transactional(readOnly = true)
@@ -34,7 +33,6 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
 
     private final ExchangeRateRepository exchangeRateRepository;
     private final CurrencyRepository currencyRepository;
-    private final RateCacheService rateCacheService;
     private final RateAggregatorService rateAggregatorService;
 
     /**
@@ -42,19 +40,15 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
      *
      * @param exchangeRateRepository repository for exchange rate persistence
      * @param currencyRepository repository for currency validation
-     * @param rateCacheService service for Redis cache operations
      * @param rateAggregatorService service for fetching rates from providers
      */
     public ExchangeRateServiceImpl(ExchangeRateRepository exchangeRateRepository,
-                                    CurrencyRepository currencyRepository,
-                                    RateCacheService rateCacheService,
-                                    RateAggregatorService rateAggregatorService) {
+                                   CurrencyRepository currencyRepository,
+                                   RateAggregatorService rateAggregatorService) {
         this.exchangeRateRepository = Objects.requireNonNull(exchangeRateRepository,
                 "ExchangeRateRepository must not be null");
         this.currencyRepository = Objects.requireNonNull(currencyRepository,
                 "CurrencyRepository must not be null");
-        this.rateCacheService = Objects.requireNonNull(rateCacheService,
-                "RateCacheService must not be null");
         this.rateAggregatorService = Objects.requireNonNull(rateAggregatorService,
                 "RateAggregatorService must not be null");
     }
@@ -69,7 +63,7 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
 
         // Get the exchange rate entity (cache-first)
         ExchangeRate rate = getExchangeRateEntity(from, to);
-        
+
         // Calculate and return converted amount
         return calculateConvertedAmount(amount, rate.getRate());
     }
@@ -84,28 +78,16 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
         // Validate currencies exist
         validateCurrenciesExist(from, to);
 
-        // Step 1: Check cache
-        var cachedRate = rateCacheService.getCachedRate(from, to);
-        if (cachedRate.isPresent()) {
-            logger.info("Cache hit for {} -> {}", from, to);
-            return cachedRate.get();
-        }
-
-        logger.debug("Cache miss for {} -> {}", from, to);
-
-        // Step 2: Check database for recent rate
+        // Step 1: Check database for recent rate
         var dbRate = findRecentRate(from, to);
         if (dbRate.isPresent()) {
             logger.info("Found recent rate in database for {} -> {}", from, to);
-            var rate = dbRate.get();
-            // Update cache with database rate
-            rateCacheService.cacheRate(from, to, rate);
-            return rate;
+            return dbRate.get();
         }
 
         logger.debug("No recent rate in database for {} -> {}, fetching from providers", from, to);
 
-        // Step 3: Fetch from providers
+        // Step 2: Fetch from providers
         return fetchFreshRate(from, to);
     }
 
@@ -137,12 +119,6 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
                     .toList();
 
             var results = rateAggregatorService.fetchAndAggregateMultiple(from, targets);
-            
-            // Update cache for successful fetches
-            results.forEach((to, rate) -> {
-                rateCacheService.cacheRate(from, to, rate);
-                logger.debug("Cached rate: {} -> {} = {}", from, to, rate.getRate());
-            });
 
             successCount += results.size();
             totalPairs += targets.size();
@@ -180,10 +156,7 @@ public class ExchangeRateServiceImpl implements ExchangeRateService {
         // Fetch from providers (this will save to database automatically)
         var rate = rateAggregatorService.fetchAndAggregate(from, to);
 
-        // Update cache
-        rateCacheService.cacheRate(from, to, rate);
-
-        logger.info("Successfully fetched and cached fresh rate: {} -> {} = {}",
+        logger.info("Successfully fetched fresh rate: {} -> {} = {}",
                 from, to, rate.getRate());
 
         return rate;
