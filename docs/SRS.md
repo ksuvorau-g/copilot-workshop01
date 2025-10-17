@@ -58,6 +58,7 @@ The Currency Exchange Rates Provider Service is a standalone microservice that a
 ### 2.4 Operating Environment
 - **Runtime**: Docker containers orchestrated via Docker Compose
 - **Database**: PostgreSQL 17
+- **Cache**: Redis (latest stable version)
 - **Application Server**: Embedded Spring Boot (Tomcat)
 - **Network**: Internal Docker network for mock providers
 - **External Dependencies**: Internet access for Fixer.io and ExchangeRatesAPI.io
@@ -66,11 +67,13 @@ The Currency Exchange Rates Provider Service is a standalone microservice that a
 - Java 25 required
 - Spring Boot 3.5.6 framework
 - Maven build system
-- PostgreSQL database only (no NoSQL alternatives)
+- PostgreSQL database for persistence
+- Redis for caching layer
 - Liquibase for schema management
 - Docker containerization mandatory
 - Rate precision: 6 decimal places
 - Cache freshness: 1 hour
+- Cache TTL: 1 hour (3600 seconds)
 
 ---
 
@@ -121,12 +124,16 @@ Columns:
 - **FR-3.2**: Endpoint SHALL be accessible to all users (public)
 - **FR-3.3**: Parameters `from` and `to` are REQUIRED
 - **FR-3.4**: Parameter `amount` is OPTIONAL (default: 1.0)
-- **FR-3.5**: System SHALL check database for rates within 1 hour freshness window
-- **FR-3.6**: If no fresh rates exist, system SHALL fetch from all providers
-- **FR-3.7**: System SHALL select best rate using lowest value as primary criterion
-- **FR-3.8**: System SHALL use provider priority as tie-breaker (real providers: 100, mocks: 50)
-- **FR-3.9**: System SHALL store ALL fetched rates before returning result
-- **FR-3.10**: Returned amount SHALL be calculated as `amount * rate` with 6 decimal precision
+- **FR-3.5**: System SHALL first check Redis cache for rate using key pattern `exchange_rate:{from}:{to}`
+- **FR-3.6**: On cache hit, system SHALL return cached `ExchangeRate` entity
+- **FR-3.7**: On cache miss, system SHALL check database for rates within 1 hour freshness window
+- **FR-3.8**: If no fresh rates exist in database, system SHALL fetch from all providers
+- **FR-3.9**: System SHALL select best rate using lowest value as primary criterion
+- **FR-3.10**: System SHALL use provider priority as tie-breaker (real providers: 100, mocks: 50)
+- **FR-3.11**: System SHALL store ALL fetched rates in database before returning result
+- **FR-3.12**: System SHALL cache the selected best rate in Redis with 1 hour TTL (3600 seconds)
+- **FR-3.13**: Returned amount SHALL be calculated as `amount * rate` with 6 decimal precision
+- **FR-3.14**: If Redis is unavailable, system SHALL fall back to database-only operation without error
 
 **Database Reference:** See `002-create-exchange-rate-table.yaml`
 ```yaml
@@ -149,9 +156,11 @@ Columns:
 **Functional Requirements:**
 - **FR-4.1**: System SHALL provide endpoint `POST /api/v1/currencies/refresh`
 - **FR-4.2**: Endpoint SHALL be restricted to ADMIN role only
-- **FR-4.3**: System SHALL fetch rates for all registered currencies
-- **FR-4.4**: System SHALL query all configured providers in parallel
-- **FR-4.5**: System SHALL store all successful responses
+- **FR-4.3**: System SHALL clear all cached rates from Redis before refresh
+- **FR-4.4**: System SHALL fetch rates for all registered currencies
+- **FR-4.5**: System SHALL query all configured providers in parallel
+- **FR-4.6**: System SHALL store all successful responses in database
+- **FR-4.7**: System SHALL cache the best rate for each currency pair in Redis with 1 hour TTL
 
 ### 3.3 Trend Analysis
 
@@ -214,22 +223,56 @@ public interface ExchangeRateProvider {
 **Functional Requirements:**
 - **FR-8.1**: System SHALL schedule rate refresh every 3600000ms (1 hour)
 - **FR-8.2**: Initial delay SHALL be 10000ms (10 seconds) after startup
-- **FR-8.3**: Scheduler SHALL fetch rates for all registered currencies
-- **FR-8.4**: Scheduler SHALL use `@Scheduled` Spring annotation with fixed rate
-- **FR-8.5**: Failed updates SHALL be logged but not prevent subsequent runs
+- **FR-8.3**: Scheduler SHALL clear all cached rates from Redis before refresh
+- **FR-8.4**: Scheduler SHALL fetch rates for all registered currencies
+- **FR-8.5**: Scheduler SHALL use `@Scheduled` Spring annotation with fixed rate
+- **FR-8.6**: Scheduler SHALL cache the best rate for each currency pair in Redis after fetch
+- **FR-8.7**: Failed updates SHALL be logged but not prevent subsequent runs
 
-### 3.6 Security & Authentication
+### 3.6 Caching Layer
 
-#### 3.6.1 User Management
+#### 3.6.1 Redis Cache Integration
+**Priority:** High  
+**Description:** Implement Redis-based caching to reduce database load and improve response times.
+
+**Functional Requirements:**
+- **FR-9.1**: System SHALL use Redis as caching layer for exchange rates
+- **FR-9.2**: Cache key format SHALL be `exchange_rate:{baseCurrency}:{targetCurrency}` (e.g., `exchange_rate:USD:EUR`)
+- **FR-9.3**: Cached value SHALL be serialized `ExchangeRate` entity including: rate, provider, timestamp, currencies
+- **FR-9.4**: Cache entries SHALL have TTL of 3600 seconds (1 hour)
+- **FR-9.5**: System SHALL implement cache-aside pattern: check cache → check database → fetch from providers
+- **FR-9.6**: System SHALL only cache the best/selected rate for each currency pair
+- **FR-9.7**: Redis SHALL run as Docker Compose service on default port 6379
+- **FR-9.8**: System SHALL use Spring Data Redis with Lettuce client
+- **FR-9.9**: If Redis connection fails, system SHALL log warning and operate without cache (degraded mode)
+- **FR-9.10**: Cache SHALL be completely cleared on manual refresh and scheduled refresh operations
+- **FR-9.11**: System SHALL serialize cache entries using JSON format for human-readable debugging
+
+**Cache Flow Diagram:**
+```
+Request → [Redis Cache?] ─Yes→ Return cached rate
+              │
+              No (cache miss)
+              ↓
+         [Database?] ─Yes→ Return DB rate + Cache it
+              │
+              No (stale/missing)
+              ↓
+    [Fetch from Providers] → Save to DB → Cache best rate → Return
+```
+
+### 3.7 Security & Authentication
+
+#### 3.7.1 User Management
 **Priority:** Critical  
 **Description:** Implement user authentication and role-based authorization.
 
 **Functional Requirements:**
-- **FR-9.1**: System SHALL support form-based login
-- **FR-9.2**: System SHALL support HTTP Basic authentication
-- **FR-9.3**: Passwords SHALL be stored using BCrypt encryption
-- **FR-9.4**: Users SHALL be stored in database (see `003-create-user-table.yaml`)
-- **FR-9.5**: System SHALL support many-to-many user-role relationship
+- **FR-10.1**: System SHALL support form-based login
+- **FR-10.2**: System SHALL support HTTP Basic authentication
+- **FR-10.3**: Passwords SHALL be stored using BCrypt encryption
+- **FR-10.4**: Users SHALL be stored in database (see `003-create-user-table.yaml`)
+- **FR-10.5**: System SHALL support many-to-many user-role relationship
 
 **Database Reference:** See `003-create-user-table.yaml`, `004-create-role-table.yaml`, `005-create-user-roles-table.yaml`
 ```yaml
@@ -254,14 +297,14 @@ Columns:
   - role_id: BIGINT (PK, FK to roles.id, CASCADE delete)
 ```
 
-#### 3.6.2 Authorization Rules
+#### 3.7.2 Authorization Rules
 **Functional Requirements:**
-- **FR-10.1**: Public endpoints: GET `/api/v1/currencies`, GET `/api/v1/currencies/exchange-rates`
-- **FR-10.2**: PREMIUM_USER + ADMIN: GET `/api/v1/currencies/trends`
-- **FR-10.3**: ADMIN only: POST `/api/v1/currencies`, POST `/api/v1/currencies/refresh`
-- **FR-10.4**: Public endpoints: All `/mock/**` endpoints, Swagger UI, actuator health
-- **FR-10.5**: Unauthenticated requests to protected endpoints SHALL return HTTP 401
-- **FR-10.6**: Insufficient permissions SHALL return HTTP 403
+- **FR-11.1**: Public endpoints: GET `/api/v1/currencies`, GET `/api/v1/currencies/exchange-rates`
+- **FR-11.2**: PREMIUM_USER + ADMIN: GET `/api/v1/currencies/trends`
+- **FR-11.3**: ADMIN only: POST `/api/v1/currencies`, POST `/api/v1/currencies/refresh`
+- **FR-11.4**: Public endpoints: All `/mock/**` endpoints, Swagger UI, actuator health
+- **FR-11.5**: Unauthenticated requests to protected endpoints SHALL return HTTP 401
+- **FR-11.6**: Insufficient permissions SHALL return HTTP 403
 
 ---
 
@@ -299,26 +342,32 @@ Implemented via `@RestControllerAdvice` with appropriate HTTP status codes:
 - 503: External provider unavailable
 
 ### 4.3 API Documentation
-- **FR-11.1**: System SHALL provide Swagger/OpenAPI documentation
-- **FR-11.2**: Swagger UI SHALL be accessible at `/swagger-ui.html`
-- **FR-11.3**: OpenAPI spec SHALL be available at `/v3/api-docs`
+- **FR-12.1**: System SHALL provide Swagger/OpenAPI documentation
+- **FR-12.2**: Swagger UI SHALL be accessible at `/swagger-ui.html`
+- **FR-12.3**: OpenAPI spec SHALL be available at `/v3/api-docs`
 
 ---
 
 ## 5. Non-Functional Requirements
 
 ### 5.1 Performance Requirements
-- **NFR-1.1**: Rate retrieval SHALL complete within 5 seconds (including all provider calls)
-- **NFR-1.2**: Database queries SHALL use appropriate indexes (see `006-add-indexes.yaml`)
-- **NFR-1.3**: Concurrent requests SHALL be supported (minimum 10 simultaneous users)
-- **NFR-1.4**: Cache freshness window of 1 hour SHALL minimize unnecessary API calls
+- **NFR-1.1**: Cached rate retrieval SHALL complete within 100ms
+- **NFR-1.2**: Database rate retrieval SHALL complete within 500ms
+- **NFR-1.3**: Rate retrieval with provider fetch SHALL complete within 5 seconds (including all provider calls)
+- **NFR-1.4**: Database queries SHALL use appropriate indexes (see `006-add-indexes.yaml`)
+- **NFR-1.5**: Concurrent requests SHALL be supported (minimum 10 simultaneous users)
+- **NFR-1.6**: Redis cache SHALL reduce database load by minimum 70% for repeated queries
+- **NFR-1.7**: Cache freshness window of 1 hour SHALL minimize unnecessary API calls
 
 ### 5.2 Reliability Requirements
 - **NFR-2.1**: System SHALL implement retry logic for external provider failures
 - **NFR-2.2**: Retry attempts SHALL be limited to 3 per provider
 - **NFR-2.3**: Provider failure SHALL NOT prevent other providers from being queried
 - **NFR-2.4**: System SHALL continue operating if one provider is unavailable
-- **NFR-2.5**: Database transactions SHALL be atomic (all-or-nothing)
+- **NFR-2.5**: System SHALL continue operating if Redis is unavailable (degraded mode)
+- **NFR-2.6**: Redis connection failures SHALL be logged as warnings, not errors
+- **NFR-2.7**: Cache operations SHALL NOT throw exceptions that prevent request completion
+- **NFR-2.8**: Database transactions SHALL be atomic (all-or-nothing)
 
 ### 5.3 Data Integrity Requirements
 - **NFR-3.1**: Exchange rates SHALL be stored with 6 decimal places precision
@@ -346,9 +395,10 @@ Implemented via `@RestControllerAdvice` with appropriate HTTP status codes:
 - **NFR-6.1**: Unit test coverage SHALL exceed 80%
 - **NFR-6.2**: All controllers SHALL have `@WebMvcTest` tests
 - **NFR-6.3**: External API calls SHALL be tested with WireMock
-- **NFR-6.4**: Integration tests SHALL use TestContainers for PostgreSQL
-- **NFR-6.5**: Testing framework SHALL be JUnit 5
-- **NFR-6.6**: Test framework SHALL include Spring Test Framework
+- **NFR-6.4**: Integration tests SHALL use TestContainers for PostgreSQL and Redis
+- **NFR-6.5**: Cache operations SHALL be tested with embedded Redis or TestContainers
+- **NFR-6.6**: Testing framework SHALL be JUnit 5
+- **NFR-6.7**: Test framework SHALL include Spring Test Framework
 
 ---
 
@@ -428,6 +478,14 @@ Performance optimization indexes (defined in `006-add-indexes.yaml`):
 ┌──────────────────────┴──────────────────────────────┐
 │                  Service Layer                       │
 │  CurrencyService | ExchangeRateService              │
+└─────────┬────────────────────────────────┬──────────┘
+          │                                │
+          │         ┌──────────────────────┘
+          │         │
+┌─────────▼─────────▼─────────────────────────────────┐
+│            RateCacheService (Redis)                  │
+│  Cache key: exchange_rate:{from}:{to}               │
+│  TTL: 3600 seconds                                   │
 └──────────────────────┬──────────────────────────────┘
                        │
 ┌──────────────────────┴──────────────────────────────┐
@@ -466,7 +524,13 @@ Performance optimization indexes (defined in `006-add-indexes.yaml`):
 │  │ Port: 8080   │  │ Port: 5432 │  │ Port: 8081  │ │
 │  └──────┬───────┘  └────────────┘  └─────────────┘ │
 │         │                                           │
-│    ┌────┴────┐                                      │
+│         │          ┌────────────┐                   │
+│         └─────────►│   Redis    │                   │
+│                    │   Cache    │                   │
+│                    │ Port: 6379 │                   │
+│                    └────────────┘                   │
+│                                                      │
+│    ┌────┬────┐                                      │
 │    │         │                                      │
 │  ┌─▼────┐  ┌▼─────┐                                │
 │  │Mock1 │  │Mock2 │                                │
@@ -490,8 +554,11 @@ Performance optimization indexes (defined in `006-add-indexes.yaml`):
 | Framework | Spring Boot | 3.5.6 | Application framework |
 | Build Tool | Maven | 3.x | Dependency management |
 | Database | PostgreSQL | 17 | Data persistence |
+| Cache | Redis | Latest | In-memory caching |
 | Migration | Liquibase | Latest | Schema versioning |
 | ORM | Spring Data JPA | (via Spring Boot) | Database access |
+| Cache Client | Spring Data Redis | (via Spring Boot) | Redis integration |
+| Redis Driver | Lettuce | (via Spring Boot) | Redis connection pool |
 | Security | Spring Security | (via Spring Boot) | Authentication/Authorization |
 | Validation | Hibernate Validator | (via Spring Boot) | Input validation |
 | Retry | Spring Retry | (via Spring Boot) | Fault tolerance |
@@ -503,7 +570,8 @@ Performance optimization indexes (defined in `006-add-indexes.yaml`):
 | Mocking | Mockito | Test doubles |
 | Integration Tests | Spring Test | Context-aware tests |
 | API Mocking | WireMock | External API simulation |
-| Container Testing | TestContainers | PostgreSQL test instances |
+| Container Testing | TestContainers | PostgreSQL + Redis test instances |
+| Embedded Redis | Embedded Redis (or TestContainers) | Redis test instances |
 | Code Coverage | JaCoCo | Coverage analysis |
 | Static Analysis | CheckStyle, PMD | Code quality |
 | Mutation Testing | PiTest (Optional) | Test quality |
@@ -513,6 +581,7 @@ Performance optimization indexes (defined in `006-add-indexes.yaml`):
 |-----------|------------|---------|
 | Lombok | Project Lombok | Boilerplate reduction |
 | HTTP Client | RestTemplate | External API calls |
+| Serialization | Jackson | JSON serialization for Redis |
 | API Docs | springdoc-openapi | Swagger generation |
 | Containerization | Docker, Docker Compose | Deployment |
 | Database UI | Adminer | Database management |
@@ -556,6 +625,7 @@ Required Lombok annotations:
 | Unit Tests | JUnit 5 + Mockito | 80% | `@ExtendWith(MockitoExtension.class)` |
 | Controller Tests | MockMvc | 100% | `@WebMvcTest(ControllerClass.class)` |
 | Service Tests | Mockito | 90% | `@Mock`, `@InjectMocks` |
+| Cache Tests | Embedded Redis / TestContainers | 100% | `@SpringBootTest`, `@Testcontainers` |
 | Integration Tests | Spring Test | N/A | `@SpringBootTest` |
 | Provider Tests | WireMock | 100% | `@WireMockTest` |
 
@@ -590,6 +660,19 @@ Required Lombok annotations:
 - Access admin endpoint as regular user (403)
 - Password encryption verification
 
+#### Caching
+- Cache hit scenario (return cached rate)
+- Cache miss scenario (fetch from database)
+- Cache miss + stale database (fetch from providers)
+- Cache population after provider fetch
+- Cache invalidation on manual refresh
+- Cache invalidation on scheduled refresh
+- Cache key format validation (`exchange_rate:USD:EUR`)
+- TTL expiration (verify 1 hour expiration)
+- Redis unavailable (fallback to database-only operation)
+- Verify only best rate is cached (not all provider rates)
+- Concurrent cache access (thread safety)
+
 ### 10.3 Test Naming Convention
 ```
 methodName_StateUnderTest_ExpectedBehavior()
@@ -604,64 +687,10 @@ Examples:
 
 ## 11. Deployment
 
-### 11.1 Docker Compose Services
-```yaml
-services:
-  postgres:
-    image: postgres:17
-    ports: 5432:5432
-    environment:
-      POSTGRES_DB: exchangerates
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-  
-  adminer:
-    image: adminer
-    ports: 8081:8080
-  
-  aidemo1:
-    build: .
-    ports: 8080:8080
-    depends_on:
-      - postgres
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/exchangerates
-  
-  mock-provider-1:
-    # Mock service implementation
-  
-  mock-provider-2:
-    # Mock service implementation
-```
 
-### 11.2 Environment Configuration
-Configuration properties in `application.properties`:
-```properties
-# Database
-spring.datasource.url=jdbc:postgresql://localhost:5432/exchangerates
-spring.datasource.username=postgres
-spring.datasource.password=postgres
 
-# Liquibase
-spring.liquibase.enabled=true
-spring.liquibase.change-log=classpath:db/changelog/db.changelog-master.yaml
 
-# JPA
-spring.jpa.hibernate.ddl-auto=validate
-spring.jpa.show-sql=false
-
-# Provider Configuration
-exchange.provider.fixer.api-key=${FIXER_API_KEY}
-exchange.provider.fixer.base-url=https://api.fixer.io
-exchange.provider.exchangeratesapi.api-key=${EXCHANGERATESAPI_KEY}
-exchange.provider.exchangeratesapi.base-url=https://api.exchangeratesapi.io
-
-# Scheduler
-exchange.scheduler.fixed-rate=3600000
-exchange.scheduler.initial-delay=10000
-```
-
-### 11.3 Build & Run Commands
+### 11.1 Build & Run Commands
 ```bash
 # Build application
 ./mvnw clean package
@@ -670,13 +699,22 @@ exchange.scheduler.initial-delay=10000
 ./mvnw test
 
 # Start infrastructure
-docker-compose up -d postgres adminer
+docker-compose up -d postgres redis adminer
 
 # Run application locally
 ./mvnw spring-boot:run
 
 # Run full stack in Docker
 docker-compose up --build
+
+# Monitor Redis cache (in separate terminal)
+docker exec -it <redis-container> redis-cli MONITOR
+
+# View cached keys
+docker exec -it <redis-container> redis-cli KEYS "exchange_rate:*"
+
+# Clear Redis cache manually
+docker exec -it <redis-container> redis-cli FLUSHALL
 ```
 
 ---
@@ -748,6 +786,12 @@ Response: 200 OK
 | **Provider Priority** | Numeric value determining tie-breaker in rate selection (real=100, mock=50) |
 | **Changeset** | Liquibase migration unit defining database schema changes |
 | **Trend** | Percentage change in exchange rate over time period |
+| **Cache Hit** | Successful retrieval of data from Redis cache |
+| **Cache Miss** | Failed retrieval from cache, requiring database or provider fetch |
+| **TTL (Time To Live)** | Duration (3600 seconds) before cache entry expires |
+| **Cache-Aside Pattern** | Caching strategy where application checks cache before database |
+| **Degraded Mode** | Operation without Redis cache when Redis is unavailable |
+| **LRU (Least Recently Used)** | Redis eviction policy for memory management |
 
 ---
 
@@ -798,6 +842,7 @@ secrets/
 | Version | Date | Author | Description |
 |---------|------|--------|-------------|
 | 1.0 | 2025-10-17 | System | Initial SRS based on requirements.txt and Liquibase schema |
+| 1.1 | 2025-10-17 | System | Added Redis caching layer requirements with cache-aside pattern, 1-hour TTL, and degraded mode fallback |
 
 ---
 
