@@ -1,5 +1,6 @@
 package com.example.aidemo1.scheduler;
 
+import com.example.aidemo1.service.ExchangeRateCacheService;
 import com.example.aidemo1.service.ExchangeRateService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -16,7 +17,8 @@ import static org.mockito.Mockito.*;
 /**
  * Unit tests for ExchangeRateScheduler.
  * 
- * Tests verify scheduled task execution, error handling, and manual trigger functionality.
+ * Tests verify scheduled task execution, error handling, manual trigger functionality,
+ * and Redis cache integration.
  */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("ExchangeRateScheduler Tests")
@@ -24,6 +26,9 @@ class ExchangeRateSchedulerTest {
 
     @Mock
     private ExchangeRateService exchangeRateService;
+
+    @Mock
+    private ExchangeRateCacheService cacheService;
 
     @InjectMocks
     private ExchangeRateScheduler scheduler;
@@ -33,13 +38,14 @@ class ExchangeRateSchedulerTest {
     class ConstructorTests {
 
         @Test
-        @DisplayName("Should create scheduler with valid ExchangeRateService")
+        @DisplayName("Should create scheduler with valid ExchangeRateService and CacheService")
         void shouldCreateSchedulerWithValidService() {
             // Given
             ExchangeRateService service = mock(ExchangeRateService.class);
+            ExchangeRateCacheService cache = mock(ExchangeRateCacheService.class);
 
             // When
-            ExchangeRateScheduler newScheduler = new ExchangeRateScheduler(service);
+            ExchangeRateScheduler newScheduler = new ExchangeRateScheduler(service, cache);
 
             // Then
             assertThat(newScheduler).isNotNull();
@@ -51,7 +57,7 @@ class ExchangeRateSchedulerTest {
     class RefreshExchangeRatesTests {
 
         @Test
-        @DisplayName("Should successfully refresh exchange rates")
+        @DisplayName("Should successfully refresh exchange rates and invalidate cache")
         void shouldSuccessfullyRefreshExchangeRates() {
             // Given
             int expectedRefreshCount = 6;
@@ -61,6 +67,7 @@ class ExchangeRateSchedulerTest {
             scheduler.refreshExchangeRates();
 
             // Then
+            verify(cacheService, times(1)).invalidateAllCache();
             verify(exchangeRateService, times(1)).refreshAllRates();
         }
 
@@ -74,8 +81,24 @@ class ExchangeRateSchedulerTest {
             scheduler.refreshExchangeRates();
 
             // Then
+            verify(cacheService).invalidateAllCache();
             verify(exchangeRateService).refreshAllRates();
             // In real scenario, verify logs using log capturing framework
+        }
+
+        @Test
+        @DisplayName("Should continue refresh even if cache invalidation fails")
+        void shouldContinueRefreshWhenCacheInvalidationFails() {
+            // Given
+            doThrow(new RuntimeException("Redis connection failed")).when(cacheService).invalidateAllCache();
+            when(exchangeRateService.refreshAllRates()).thenReturn(5);
+
+            // When
+            scheduler.refreshExchangeRates();
+
+            // Then
+            verify(cacheService).invalidateAllCache();
+            verify(exchangeRateService).refreshAllRates(); // Should still be called
         }
 
         @Test
@@ -89,6 +112,7 @@ class ExchangeRateSchedulerTest {
             assertThatCode(() -> scheduler.refreshExchangeRates())
                     .doesNotThrowAnyException();
 
+            verify(cacheService).invalidateAllCache();
             verify(exchangeRateService).refreshAllRates();
         }
 
@@ -111,6 +135,7 @@ class ExchangeRateSchedulerTest {
 
             // Then - verify second call was made and succeeded
             verify(exchangeRateService, times(2)).refreshAllRates();
+            verify(cacheService, times(2)).invalidateAllCache();
         }
 
         @Test
@@ -123,6 +148,7 @@ class ExchangeRateSchedulerTest {
             scheduler.refreshExchangeRates();
 
             // Then
+            verify(cacheService).invalidateAllCache();
             verify(exchangeRateService).refreshAllRates();
             // Verify it completes without issues even with 0 pairs
         }
@@ -137,6 +163,7 @@ class ExchangeRateSchedulerTest {
             assertThatCode(() -> scheduler.refreshExchangeRates())
                     .doesNotThrowAnyException();
 
+            verify(cacheService).invalidateAllCache();
             verify(exchangeRateService).refreshAllRates();
         }
     }
@@ -146,7 +173,7 @@ class ExchangeRateSchedulerTest {
     class TriggerManualRefreshTests {
 
         @Test
-        @DisplayName("Should successfully trigger manual refresh")
+        @DisplayName("Should successfully trigger manual refresh and invalidate cache")
         void shouldSuccessfullyTriggerManualRefresh() {
             // Given
             int expectedCount = 8;
@@ -157,6 +184,7 @@ class ExchangeRateSchedulerTest {
 
             // Then
             assertThat(result).isEqualTo(expectedCount);
+            verify(cacheService).invalidateAllCache();
             verify(exchangeRateService).refreshAllRates();
         }
 
@@ -171,6 +199,23 @@ class ExchangeRateSchedulerTest {
 
             // Then
             assertThat(result).isEqualTo(12);
+            verify(cacheService).invalidateAllCache();
+        }
+
+        @Test
+        @DisplayName("Should continue refresh even if cache invalidation fails")
+        void shouldContinueRefreshWhenCacheInvalidationFails() {
+            // Given
+            doThrow(new RuntimeException("Redis unavailable")).when(cacheService).invalidateAllCache();
+            when(exchangeRateService.refreshAllRates()).thenReturn(5);
+
+            // When
+            int result = scheduler.triggerManualRefresh();
+
+            // Then
+            assertThat(result).isEqualTo(5);
+            verify(cacheService).invalidateAllCache();
+            verify(exchangeRateService).refreshAllRates();
         }
 
         @Test
@@ -186,6 +231,7 @@ class ExchangeRateSchedulerTest {
                     .hasMessageContaining("Manual refresh failed")
                     .hasCause(cause);
 
+            verify(cacheService).invalidateAllCache();
             verify(exchangeRateService).refreshAllRates();
         }
 
@@ -201,6 +247,8 @@ class ExchangeRateSchedulerTest {
             assertThatThrownBy(() -> scheduler.triggerManualRefresh())
                     .isInstanceOf(RuntimeException.class)
                     .hasMessageContaining(originalMessage);
+
+            verify(cacheService).invalidateAllCache();
         }
 
         @Test
@@ -214,6 +262,7 @@ class ExchangeRateSchedulerTest {
 
             // Then
             assertThat(result).isZero();
+            verify(cacheService).invalidateAllCache();
             verify(exchangeRateService).refreshAllRates();
         }
 
@@ -235,6 +284,7 @@ class ExchangeRateSchedulerTest {
             assertThat(result1).isEqualTo(5);
             assertThat(result2).isEqualTo(7);
             assertThat(result3).isEqualTo(6);
+            verify(cacheService, times(3)).invalidateAllCache();
             verify(exchangeRateService, times(3)).refreshAllRates();
         }
     }
@@ -244,7 +294,7 @@ class ExchangeRateSchedulerTest {
     class IntegrationBehaviorTests {
 
         @Test
-        @DisplayName("Should call service exactly once per scheduled execution")
+        @DisplayName("Should call service and cache exactly once per scheduled execution")
         void shouldCallServiceOncePerExecution() {
             // Given
             when(exchangeRateService.refreshAllRates()).thenReturn(5);
@@ -253,8 +303,10 @@ class ExchangeRateSchedulerTest {
             scheduler.refreshExchangeRates();
 
             // Then
+            verify(cacheService, times(1)).invalidateAllCache();
             verify(exchangeRateService, times(1)).refreshAllRates();
             verifyNoMoreInteractions(exchangeRateService);
+            verifyNoMoreInteractions(cacheService);
         }
 
         @Test
@@ -268,6 +320,7 @@ class ExchangeRateSchedulerTest {
             scheduler.refreshExchangeRates();
 
             // Then - service should be called twice (once for each)
+            verify(cacheService, times(2)).invalidateAllCache();
             verify(exchangeRateService, times(2)).refreshAllRates();
         }
 
@@ -283,6 +336,7 @@ class ExchangeRateSchedulerTest {
             scheduler.refreshExchangeRates();
 
             // Then - each call should execute
+            verify(cacheService, times(3)).invalidateAllCache();
             verify(exchangeRateService, times(3)).refreshAllRates();
         }
     }
