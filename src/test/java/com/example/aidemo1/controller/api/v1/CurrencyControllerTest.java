@@ -227,6 +227,26 @@ class CurrencyControllerTest {
     }
 
     @Test
+    void getExchangeRate_WhenFromIsEmpty_ReturnsBadRequest() throws Exception {
+        // When & Then
+        mockMvc.perform(get("/api/v1/currencies/exchange-rates")
+                        .param("from", "")
+                        .param("to", "EUR")
+                        .param("amount", "100"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void getExchangeRate_WhenToIsEmpty_ReturnsBadRequest() throws Exception {
+        // When & Then
+        mockMvc.perform(get("/api/v1/currencies/exchange-rates")
+                        .param("from", "USD")
+                        .param("to", "")
+                        .param("amount", "100"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void getExchangeRate_NormalizesCurrencyCodes_ToUppercase() throws Exception {
         // Given
         ExchangeRate rateEntity = ExchangeRate.builder()
