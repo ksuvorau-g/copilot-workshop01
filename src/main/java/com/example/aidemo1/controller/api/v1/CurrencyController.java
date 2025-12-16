@@ -2,15 +2,25 @@ package com.example.aidemo1.controller.api.v1;
 
 import com.example.aidemo1.dto.request.AddCurrencyRequest;
 import com.example.aidemo1.dto.response.CurrencyResponse;
+import com.example.aidemo1.dto.response.ErrorResponse;
 import com.example.aidemo1.dto.response.ExchangeRateResponse;
 import com.example.aidemo1.entity.Currency;
 import com.example.aidemo1.entity.ExchangeRate;
 import com.example.aidemo1.service.CurrencyService;
 import com.example.aidemo1.service.ExchangeRateService;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
@@ -39,6 +49,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 @Validated
 @Slf4j
+@Tag(name = "Currency Management", description = "Endpoints for managing currencies and fetching exchange rates")
 public class CurrencyController {
 
     private final CurrencyService currencyService;
@@ -51,6 +62,20 @@ public class CurrencyController {
      * 
      * @return list of all currencies
      */
+    @Operation(
+            summary = "Get all currencies",
+            description = "Retrieves a list of all supported currencies in the system. This is a public endpoint that does not require authentication.",
+            responses = {
+                    @ApiResponse(
+                            responseCode = "200",
+                            description = "Successfully retrieved list of currencies",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    array = @ArraySchema(schema = @Schema(implementation = CurrencyResponse.class))
+                            )
+                    )
+            }
+    )
     @GetMapping
     public ResponseEntity<List<CurrencyResponse>> getCurrencies() {
         log.info("GET /api/v1/currencies - Fetching all currencies");
@@ -83,10 +108,45 @@ public class CurrencyController {
      * @param amount amount to convert
      * @return exchange rate information with converted amount
      */
+    @Operation(
+            summary = "Get exchange rate and convert amount",
+            description = "Calculates the exchange rate between two currencies and converts the specified amount. " +
+                         "The system fetches rates from multiple providers and returns the best available rate. " +
+                         "This is a public endpoint that does not require authentication.",
+            responses = {
+                    @ApiResponse(
+                            responseCode = "200",
+                            description = "Successfully calculated exchange rate and converted amount",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ExchangeRateResponse.class)
+                            )
+                    ),
+                    @ApiResponse(
+                            responseCode = "400",
+                            description = "Invalid request parameters (e.g., invalid currency codes, negative amount)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ErrorResponse.class)
+                            )
+                    ),
+                    @ApiResponse(
+                            responseCode = "404",
+                            description = "Currency pair not found or rate unavailable",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ErrorResponse.class)
+                            )
+                    )
+            }
+    )
     @GetMapping("/exchange-rates")
     public ResponseEntity<ExchangeRateResponse> getExchangeRate(
+            @Parameter(description = "Source currency code (ISO 4217, 3 uppercase letters)", example = "USD", required = true)
             @RequestParam String from,
+            @Parameter(description = "Target currency code (ISO 4217, 3 uppercase letters)", example = "EUR", required = true)
             @RequestParam String to,
+            @Parameter(description = "Amount to convert (must be positive)", example = "100.00", required = true)
             @RequestParam BigDecimal amount) {
         
         log.info("GET /api/v1/currencies/exchange-rates - from={}, to={}, amount={}", 
@@ -146,6 +206,45 @@ public class CurrencyController {
      * @param request the currency to add
      * @return the created currency with HTTP 201 status
      */
+    @Operation(
+            summary = "Add a new currency",
+            description = "Creates a new currency in the system. Requires ADMIN role and authentication.",
+            security = @SecurityRequirement(name = "basicAuth"),
+            responses = {
+                    @ApiResponse(
+                            responseCode = "201",
+                            description = "Currency successfully created",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = CurrencyResponse.class)
+                            )
+                    ),
+                    @ApiResponse(
+                            responseCode = "400",
+                            description = "Invalid currency data (e.g., invalid code format, missing required fields)",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ErrorResponse.class)
+                            )
+                    ),
+                    @ApiResponse(
+                            responseCode = "401",
+                            description = "Authentication required"
+                    ),
+                    @ApiResponse(
+                            responseCode = "403",
+                            description = "Insufficient permissions (ADMIN role required)"
+                    ),
+                    @ApiResponse(
+                            responseCode = "409",
+                            description = "Currency with this code already exists",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ErrorResponse.class)
+                            )
+                    )
+            }
+    )
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<CurrencyResponse> addCurrency(@Valid @RequestBody AddCurrencyRequest request) {
@@ -186,6 +285,38 @@ public class CurrencyController {
      *
      * @return success message with count of refreshed pairs
      */
+    @Operation(
+            summary = "Refresh all exchange rates",
+            description = "Manually triggers a refresh of all exchange rates from configured providers. " +
+                         "This updates both the database and cache. Requires ADMIN role and authentication.",
+            security = @SecurityRequirement(name = "basicAuth"),
+            responses = {
+                    @ApiResponse(
+                            responseCode = "200",
+                            description = "Exchange rates successfully refreshed",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = Map.class)
+                            )
+                    ),
+                    @ApiResponse(
+                            responseCode = "401",
+                            description = "Authentication required"
+                    ),
+                    @ApiResponse(
+                            responseCode = "403",
+                            description = "Insufficient permissions (ADMIN role required)"
+                    ),
+                    @ApiResponse(
+                            responseCode = "500",
+                            description = "Error refreshing rates from providers",
+                            content = @Content(
+                                    mediaType = MediaType.APPLICATION_JSON_VALUE,
+                                    schema = @Schema(implementation = ErrorResponse.class)
+                            )
+                    )
+            }
+    )
     @PostMapping("/refresh")
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<Map<String, Object>> refreshRates() {
