@@ -67,7 +67,6 @@ public class ExchangeRateRequest {
             requiredMode = Schema.RequiredMode.REQUIRED,
             minimum = "0.01"
     )
-    @Positive(message = "Amount must be greater than zero")
     @DecimalMin(value = "0.01", message = "Amount must be at least 0.01")
     private BigDecimal amount;
 }
